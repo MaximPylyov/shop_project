@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  catalog_service:
+    build: ./catalog_service
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/mydb
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  orders_service:
+    build: ./orders_service
+    ports:
+      - "8002:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/mydb
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  reviews_service:
+    build: ./reviews_service
+    ports:
+      - "8003:8000"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
