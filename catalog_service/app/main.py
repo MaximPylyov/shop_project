@@ -1,107 +1,158 @@
-from fastapi import FastAPI
-from sqlalchemy import create_engine, Column, Integer, String, Numeric, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from tenacity import retry, stop_after_attempt, wait_exponential
-import time
 import os
-from schemas import Product, ProductCreate, Category, CategoryCreate  
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
-def get_db():
-    engine = create_engine(DATABASE_URL)
-    try:
-        engine.connect()
-    except Exception as e:
-        print(f"Failed to connect to DB: {e}")
-        raise
-    return engine
-
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-
-
-class Category(Base):
-    __tablename__ = "categories"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(32))
-
-class Product(Base):
-    __tablename__ = "products"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(128))
-    price = Column(Numeric(16,2))
-
-    category_id = Column(Integer, ForeignKey("categories.id"))
-
-
-Base.metadata.create_all(bind=engine)
+import asyncio
+from typing import List
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.future import select
+from schemas import Product as ProductSchema, ProductCreate, ProductUpdate, Category as CategorySchema, CategoryCreate, CategoryUpdate 
+from models import Product, Category  
+from database import get_db, wait_for_db, get_session
 
 app = FastAPI(title="Catalog Service")
 
-def wait_for_db():
-    max_retries = 30
-    retry_interval = 2
-    
-    for i in range(max_retries):
-        try:
-            engine = create_engine(DATABASE_URL)
-            engine.connect()
-            print("Database connection successful!")
-            return engine
-        except Exception as e:
-            print(f"Attempt {i+1}/{max_retries}: Database not ready... {str(e)}")
-            if i < max_retries - 1:
-                time.sleep(retry_interval)
-    raise Exception("Could not connect to database")
-
 @app.on_event("startup")
 async def startup():
-    app.state.db = wait_for_db()
+    app.state.db = await wait_for_db()
 
+@app.get("/products/", response_model=List[ProductSchema], tags=["Products"])
+async def get_products(db: AsyncSession = Depends(get_session)):
+    try:
+        result = await db.execute(select(Product))
+        db_products = result.scalars().all()
+        return db_products
+    except SQLAlchemyError:
+        raise HTTPException(status_code=500, detail="Ошибка при получении товаров")
 
-@app.get("/products/", tags=["Products"])
-async def get_products():
-    return {"name": "Товар 1", "price": 1200, "category_id": 1}
+@app.get("/products/{product_id}", response_model=ProductSchema, tags=["Products"])
+async def get_product_detail(product_id: int, db: AsyncSession = Depends(get_session)):
+    try:
+        result = await db.execute(select(Product).where(Product.id == product_id))
+        db_product = result.scalar_one_or_none()
+        return db_product
+    except SQLAlchemyError:
+        raise HTTPException(status_code=500, detail="Ошибка при получении товара")
 
-@app.get("/products/{product_id}", tags=["Products"])
-async def get_product_detail(product_id: int):
-    return {"name": "Товар 1", "price": 1200, "category_id": 1}
+@app.post("/products/", response_model=ProductSchema, tags=["Products"])
+async def create_product(product: ProductCreate, db: AsyncSession = Depends(get_session)):
+    try:
+        result = await db.execute(select(Category).where(Category.id == product.category_id))
+        category = result.scalar_one_or_none()
+        if category is None:
+            raise HTTPException(status_code=404, detail="Категория не найдена")
 
-@app.post("/products/", tags=["Products"])
-async def create_product():
-    return {"message": "Товар создан"}
+        db_product = Product(**product.model_dump())
+        db.add(db_product)
+        await db.commit()
+        await db.refresh(db_product)
+        return db_product
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Ошибка при создании товара")
 
-@app.put("/products/{product_id}", tags=["Products"])
-async def update_product(product_id: int):
-    return {"message": "Товар обновлен"}
+@app.put("/products/{product_id}", response_model=ProductSchema, tags=["Products"])
+async def update_product(product_id: int, product: ProductUpdate, db: AsyncSession = Depends(get_session)):
+    try:
+        result = await db.execute(select(Product).where(Product.id == product_id))
+        db_product = result.scalar_one_or_none()
+        if not db_product:
+            raise HTTPException(status_code=404, detail="Указанный товар не найден")
+        
+        if product.category_id is not None:
+            result = await db.execute(select(Category).where(Category.id == product.category_id))
+            category = result.scalar_one_or_none()
+            if category is None:
+                raise HTTPException(status_code=404, detail="Категория не найдена")
+
+        product_data = product.model_dump(exclude_unset=True)
+        for field, value in product_data.items():
+            setattr(db_product, field, value)
+
+        await db.commit()
+        await db.refresh(db_product)
+        return db_product
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Ошибка при обновление товара")
 
 @app.delete("/products/{product_id}", tags=["Products"])
-async def delete_product(product_id: int):
-    return {"message": "Товар удалён"}
+async def delete_product(product_id: int, db: AsyncSession = Depends(get_session)):
+    try:
+        result = await db.execute(
+            select(Product).filter(Product.id == product_id)
+        )
+        db_product = result.scalar_one_or_none()
+        
+        if not db_product:
+            raise HTTPException(status_code=404, detail="Указанный продукт не найден")
+        
+        await db.delete(db_product)
+        await db.commit()
+        return {"message": "Товар удалён"}
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Ошибка базы данных при удалении товара")
 
+@app.get("/categories/", response_model=List[CategorySchema], tags=["Categories"])
+async def get_categories(db: AsyncSession = Depends(get_session)):
+    try:
+        result = await db.execute(select(Category))
+        db_categories = result.scalars().all()
+        return db_categories
+    except SQLAlchemyError:
+        raise HTTPException(status_code=500, detail="Ошибка при получении списка категорий")
 
+@app.get("/categories/{category_id}", response_model=CategorySchema, tags=["Categories"])
+async def get_category_detail(category_id: int, db: AsyncSession = Depends(get_session)):
+    try:
+        result = await db.execute(select(Category).where(Category.id == category_id))
+        db_category = result.scalar_one_or_none()
+        return db_category
+    except SQLAlchemyError:
+        raise HTTPException(status_code=500, detail="Ошибка при получении категории")
 
-@app.get("/categories/", tags=["Categories"])
-async def get_categories():
-    return {"name": "Категория 1"}
+@app.post("/categories/", response_model=CategorySchema, tags=["Categories"])
+async def create_category(category: CategoryCreate, db: AsyncSession = Depends(get_session)):
+    try:
+        db_category = Category(**category.model_dump())
+        db.add(db_category)
+        await db.commit()
+        await db.refresh(db_category)
+        return db_category
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Ошибка при создании категории")
 
-@app.get("/categories/{category_id}", tags=["Categories"])
-async def get_category_detail(category_id: int):
-    return {"name": "Категория 1"}
+@app.put("/categories/{category_id}", response_model=CategorySchema, tags=["Categories"])
+async def update_category(category_id: int, product: CategoryUpdate, db: AsyncSession = Depends(get_session)):
+    try:
+        result = await db.execute(select(Category).where(Category.id == category_id))
+        db_category = result.scalar_one_or_none()
+        if not db_category:
+            raise HTTPException(status_code=404, detail="Указанная категория не найдена")
+        setattr(db_category, "name", product.name)
 
-@app.post("/categories/", tags=["Categories"])
-async def create_category():
-    return {"message": "Категория создана"}
-
-@app.put("/categories/{category_id}", tags=["Categories"])
-async def update_category(category_id: int):
-    return {"message": "Категория обновлена"}
+        await db.commit()
+        await db.refresh(db_category)
+        return db_category
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Ошибка при обновлении категории")
 
 @app.delete("/categories/{category_id}", tags=["Categories"])
-async def delete_category(category_id: int):
-    return {"message": "Категория удалена"}
+async def delete_category(category_id: int, db: AsyncSession = Depends(get_session)):
+    try:
+        result = await db.execute(
+            select(Category).filter(Category.id == category_id)
+        )
+        db_category = result.scalar_one_or_none()
+        
+        if not db_category:
+            raise HTTPException(status_code=404, detail="Указанная категория не найдена")
+        
+        await db.delete(db_category)
+        await db.commit()
+        return {"message": "Категория удалена"}
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Ошибка базы данных при удалении категории")

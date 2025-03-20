@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS order_items (
     id SERIAL PRIMARY KEY,
     order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    product_id INTEGER,
+    product_id INTEGER REFERENCES products(id) ON DELETE CASCADE ON UPDATE CASCADE,
     quantity INTEGER,
     price_at_moment numeric(16,2)
 );
