@@ -50,6 +50,15 @@ services:
     networks:
       - app-network
 
+  mongodb:
+    image: mongo:latest
+    hostname: mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
+
