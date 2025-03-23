@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS orders (
     user_id integer,
     status varchar(16),
     total_price numeric(32,2),
+    tracking_number varchar(16) DEFAULT NULL,
     created_at timestamp,
     updated_at timestamp
 );

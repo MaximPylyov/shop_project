@@ -29,6 +29,8 @@ async def get_product_detail(product_id: int, db: AsyncSession = Depends(get_ses
     try:
         result = await db.execute(select(Product).where(Product.id == product_id))
         db_product = result.scalar_one_or_none()
+        if db_product is None:
+            raise HTTPException(status_code=404, detail="Указанный заказ не найден")
         return db_product
     except SQLAlchemyError:
         raise HTTPException(status_code=500, detail="Ошибка при получении товара")
@@ -55,7 +57,7 @@ async def update_product(product_id: int, product: ProductUpdate, db: AsyncSessi
     try:
         result = await db.execute(select(Product).where(Product.id == product_id))
         db_product = result.scalar_one_or_none()
-        if not db_product:
+        if db_product is None:
             raise HTTPException(status_code=404, detail="Указанный товар не найден")
         
         if product.category_id is not None:
@@ -83,7 +85,7 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_session
         )
         db_product = result.scalar_one_or_none()
         
-        if not db_product:
+        if db_product is None:
             raise HTTPException(status_code=404, detail="Указанный продукт не найден")
         
         await db.delete(db_product)
@@ -107,8 +109,12 @@ async def get_category_detail(category_id: int, db: AsyncSession = Depends(get_s
     try:
         result = await db.execute(select(Category).where(Category.id == category_id))
         db_category = result.scalar_one_or_none()
+        if db_category is None:
+            raise HTTPException(status_code=404, detail="Указанная категория не найдена")
+        
         return db_category
     except SQLAlchemyError:
+        db.rollback()
         raise HTTPException(status_code=500, detail="Ошибка при получении категории")
 
 @app.post("/categories/", response_model=CategorySchema, tags=["Categories"])
@@ -128,7 +134,7 @@ async def update_category(category_id: int, product: CategoryUpdate, db: AsyncSe
     try:
         result = await db.execute(select(Category).where(Category.id == category_id))
         db_category = result.scalar_one_or_none()
-        if not db_category:
+        if db_category is None:
             raise HTTPException(status_code=404, detail="Указанная категория не найдена")
         setattr(db_category, "name", product.name)
 
@@ -147,7 +153,7 @@ async def delete_category(category_id: int, db: AsyncSession = Depends(get_sessi
         )
         db_category = result.scalar_one_or_none()
         
-        if not db_category:
+        if db_category is None:
             raise HTTPException(status_code=404, detail="Указанная категория не найдена")
         
         await db.delete(db_category)
