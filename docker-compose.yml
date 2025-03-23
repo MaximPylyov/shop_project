@@ -24,7 +24,7 @@ services:
     ports:
       - "8001:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/mydb
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/mydb
     networks:
       - app-network
     depends_on:
@@ -36,7 +36,7 @@ services:
     ports:
       - "8002:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/mydb
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/mydb
     networks:
       - app-network
     depends_on:
@@ -50,6 +50,15 @@ services:
     networks:
       - app-network
 
+  mongodb:
+    image: mongo:latest
+    hostname: mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
+

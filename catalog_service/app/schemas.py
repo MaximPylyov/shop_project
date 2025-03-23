@@ -7,6 +7,9 @@ class CategoryBase(BaseModel):
 class CategoryCreate(CategoryBase):
     pass
 
+class CategoryUpdate(CategoryBase):
+    pass
+
 class Category(CategoryBase):
     id: int
 
@@ -20,6 +23,12 @@ class ProductBase(BaseModel):
 
 class ProductCreate(ProductBase):
     pass
+
+
+class ProductUpdate(ProductBase):
+    name: Optional[str] = None
+    price: Optional[float] = None
+    category_id: Optional[int] = None
 
 class Product(ProductBase):
     id: int
