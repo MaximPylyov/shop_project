@@ -1,15 +1,24 @@
-import os
-import asyncio
+import aioredis
+import json
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.future import select
+
 from schemas import Product as ProductSchema, ProductCreate, ProductUpdate, Category as CategorySchema, CategoryCreate, CategoryUpdate 
 from models import Product, Category  
 from database import get_db, wait_for_db, get_session
 
+
 app = FastAPI(title="Catalog Service")
+
+async def get_redis():
+    redis = aioredis.from_url("redis://redis:6379", encoding="utf-8", decode_responses=True)
+    try:
+        yield redis
+    finally:
+        await redis.close()
 
 @app.on_event("startup")
 async def startup():
@@ -95,14 +104,19 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_session
         await db.rollback()
         raise HTTPException(status_code=500, detail="Ошибка базы данных при удалении товара")
 
-@app.get("/categories/", response_model=List[CategorySchema], tags=["Categories"])
-async def get_categories(db: AsyncSession = Depends(get_session)):
-    try:
-        result = await db.execute(select(Category))
-        db_categories = result.scalars().all()
-        return db_categories
-    except SQLAlchemyError:
-        raise HTTPException(status_code=500, detail="Ошибка при получении списка категорий")
+@app.get("/categories/", response_model=List[CategorySchema],  tags=["Categories"])
+async def get_categories(redis: aioredis.Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+    categories = await redis.get("categories")
+    if categories:
+        return [CategorySchema(**item) for item in json.loads(categories)]
+    else:
+        try:
+            result = await db.execute(select(Category))
+            db_categories = result.scalars().all()
+            await redis.set("categories", json.dumps([CategorySchema(**p.__dict__).dict() for p in db_categories]), ex=3600)
+            return db_categories
+        except SQLAlchemyError:
+            raise HTTPException(status_code=500, detail="Ошибка при получении списка категорий")
 
 @app.get("/categories/{category_id}", response_model=CategorySchema, tags=["Categories"])
 async def get_category_detail(category_id: int, db: AsyncSession = Depends(get_session)):
@@ -118,19 +132,20 @@ async def get_category_detail(category_id: int, db: AsyncSession = Depends(get_s
         raise HTTPException(status_code=500, detail="Ошибка при получении категории")
 
 @app.post("/categories/", response_model=CategorySchema, tags=["Categories"])
-async def create_category(category: CategoryCreate, db: AsyncSession = Depends(get_session)):
+async def create_category(category: CategoryCreate, redis: aioredis.Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
     try:
         db_category = Category(**category.model_dump())
         db.add(db_category)
         await db.commit()
         await db.refresh(db_category)
+        await redis.delete("categories")
         return db_category
     except SQLAlchemyError:
         await db.rollback()
         raise HTTPException(status_code=500, detail="Ошибка при создании категории")
 
 @app.put("/categories/{category_id}", response_model=CategorySchema, tags=["Categories"])
-async def update_category(category_id: int, product: CategoryUpdate, db: AsyncSession = Depends(get_session)):
+async def update_category(category_id: int, product: CategoryUpdate, redis: aioredis.Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
     try:
         result = await db.execute(select(Category).where(Category.id == category_id))
         db_category = result.scalar_one_or_none()
@@ -140,6 +155,7 @@ async def update_category(category_id: int, product: CategoryUpdate, db: AsyncSe
 
         await db.commit()
         await db.refresh(db_category)
+        await redis.delete("categories")
         return db_category
     except SQLAlchemyError:
         await db.rollback()
