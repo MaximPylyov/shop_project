@@ -1,7 +1,7 @@
 import aioredis
 import json
 from typing import List
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.future import select
@@ -9,7 +9,7 @@ from sqlalchemy.future import select
 from schemas import Product as ProductSchema, ProductCreate, ProductUpdate, Category as CategorySchema, CategoryCreate, CategoryUpdate 
 from models import Product, Category  
 from database import get_db, wait_for_db, get_session
-
+from kafka_service import send_message
 
 app = FastAPI(title="Catalog Service")
 
@@ -62,7 +62,7 @@ async def create_product(product: ProductCreate, db: AsyncSession = Depends(get_
         raise HTTPException(status_code=500, detail="Ошибка при создании товара")
 
 @app.put("/products/{product_id}", response_model=ProductSchema, tags=["Products"])
-async def update_product(product_id: int, product: ProductUpdate, db: AsyncSession = Depends(get_session)):
+async def update_product(product_id: int, product: ProductUpdate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_session)):
     try:
         result = await db.execute(select(Product).where(Product.id == product_id))
         db_product = result.scalar_one_or_none()
@@ -81,6 +81,7 @@ async def update_product(product_id: int, product: ProductUpdate, db: AsyncSessi
 
         await db.commit()
         await db.refresh(db_product)
+        background_tasks.add_task(send_message, "PRODUCT_UPDATED")
         return db_product
     except SQLAlchemyError:
         await db.rollback()
