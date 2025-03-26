@@ -47,6 +47,8 @@ services:
     build: ./reviews_service
     ports:
       - "8003:8000"
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
     networks:
       - app-network
 

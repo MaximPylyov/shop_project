@@ -1,27 +1,47 @@
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+import json
+from decimal import Decimal
+
 
 KAFKA_URL = "kafka:9092"
-TOPIC = "main_topic"
-async def get_producer() -> AIOKafkaProducer:
-    producer = AIOKafkaProducer(bootstrap_servers=KAFKA_URL)
-    await producer.start()
-    return producer
 
-async def send_message(message: str):
-    producer = await get_producer()
+def custom_serializer(obj):
+    if isinstance(obj, Decimal):
+        return float(obj)  # Преобразуем Decimal в float
+    raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
+
+async def send_event(event: dict):
+    # Инициализация продюсера
+    producer = AIOKafkaProducer(
+        bootstrap_servers=KAFKA_URL,
+        value_serializer=lambda v: json.dumps(v, default=custom_serializer).encode('utf-8')
+    )
+    await producer.start()
+    
     try:
-        await producer.send(TOPIC, message.encode("utf-8"))
-        print("ОТПРАВИЛ СООБЩЕНИЕ")
-    except Exception as e:
-        print(f"Ошибка при отправке сообщения: {e}")
+        # Отправка в топик "main_topic"
+        await producer.send('main_topic', value=event)
+        print("Событие отправлено!")
     finally:
         await producer.stop()
 
-async def consume() -> AIOKafkaConsumer:
+
+async def consume_events():
+    # Инициализация консьюмера
     consumer = AIOKafkaConsumer(
         'main_topic',
-        bootstrap_servers=KAFKA_URL,
-        group_id='your_group_id'
+        bootstrap_servers='localhost:9092',
+        group_id='my_group',
+        value_deserializer=lambda v: json.loads(v.decode('utf-8'))
     )
     await consumer.start()
-    return consumer 
+    
+    try:
+        # Чтение событий
+        async for message in consumer:
+            event = message.value
+            print(f"Получено событие: {event}")
+            # Пример обработки: сохранение в БД
+            # save_to_database(event)
+    finally:
+        await consumer.stop()

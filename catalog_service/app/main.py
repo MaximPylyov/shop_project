@@ -1,6 +1,8 @@
 import aioredis
 import json
 from typing import List
+import asyncio
+from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,7 +11,7 @@ from sqlalchemy.future import select
 from schemas import Product as ProductSchema, ProductCreate, ProductUpdate, Category as CategorySchema, CategoryCreate, CategoryUpdate 
 from models import Product, Category  
 from database import get_db, wait_for_db, get_session
-from kafka_service import send_message
+from kafka_service import send_event
 
 app = FastAPI(title="Catalog Service")
 
@@ -69,6 +71,12 @@ async def update_product(product_id: int, product: ProductUpdate, background_tas
         if db_product is None:
             raise HTTPException(status_code=404, detail="Указанный товар не найден")
         
+        old_data = {
+            "name": db_product.name,
+            "price": db_product.price,
+            "category_id": db_product.category_id,
+        }
+
         if product.category_id is not None:
             result = await db.execute(select(Category).where(Category.id == product.category_id))
             category = result.scalar_one_or_none()
@@ -81,7 +89,16 @@ async def update_product(product_id: int, product: ProductUpdate, background_tas
 
         await db.commit()
         await db.refresh(db_product)
-        background_tasks.add_task(send_message, "PRODUCT_UPDATED")
+
+        event = {
+            "user_id": 1,
+            "product_id": db_product.id,
+            "old_data": old_data,
+            "new_data": product_data,
+            "action": "PRODUCT_UPDATED",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await send_event(event)
         return db_product
     except SQLAlchemyError:
         await db.rollback()

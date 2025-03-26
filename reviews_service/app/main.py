@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 app = FastAPI(title="Reviews Service")
 
 
-client = AsyncIOMotorClient(getenv("MONGODB_URL", "mongodb://mongo:27017"))
+client = AsyncIOMotorClient(getenv("MONGODB_URL"))
 db = client.reviews_db
 reviews_collection = db.reviews
 
