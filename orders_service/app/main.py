@@ -9,6 +9,7 @@ from schemas import OrderSchema, OrderUpdate, Item
 import httpx
 from datetime import datetime  # Импортируем datetime
 from sqlalchemy import delete
+from kafka_service import send_event
 
 app = FastAPI(title="Orders Service")
 
@@ -45,6 +46,15 @@ async def create_order(user_id: int, items: List[Item], db: AsyncSession = Depen
             updated_at=datetime.utcnow()   
         )
         db.add(new_order)
+        event = {
+            "user_id": user_id,
+            "order_id": new_order.id,
+            "total_price": total_price,
+            "action": "ORDER_CREATED",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await send_event(event)
+
         await db.flush()
         
         for item in items:

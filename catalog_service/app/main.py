@@ -1,7 +1,6 @@
 import aioredis
 import json
 from typing import List
-import asyncio
 from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +9,7 @@ from sqlalchemy.future import select
 
 from schemas import Product as ProductSchema, ProductCreate, ProductUpdate, Category as CategorySchema, CategoryCreate, CategoryUpdate 
 from models import Product, Category  
-from database import get_db, wait_for_db, get_session
+from database import wait_for_db, get_session
 from kafka_service import send_event
 
 app = FastAPI(title="Catalog Service")

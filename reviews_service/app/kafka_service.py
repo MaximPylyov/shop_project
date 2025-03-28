@@ -18,7 +18,7 @@ async def send_event(event: dict):
     await producer.start()
     
     try:
-        await producer.send('product_events', value=event)
+        await producer.send('review_events', value=event)
         print("Событие отправлено!")
     finally:
         await producer.stop()
@@ -26,7 +26,7 @@ async def send_event(event: dict):
 
 async def consume_events():
     consumer = AIOKafkaConsumer(
-        'product_events',
+        'review_events',
         bootstrap_servers=KAFKA_URL,
         group_id='my_group',
         value_deserializer=lambda v: json.loads(v.decode('utf-8'))

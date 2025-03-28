@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 from typing import List
 from pydantic import BaseModel, Field
+from kafka_service import send_event
 
 app = FastAPI(title="Reviews Service")
 
@@ -35,6 +36,15 @@ async def create_review(review: ReviewCreate):
     review_dict["_id"] = str(ObjectId())
     review_dict["created_at"] = datetime.utcnow()
     await reviews_collection.insert_one(review_dict)
+
+    event = {
+        "user_id": review.user_id,
+        "product_id": review.product_id,
+        "action": "REVIEW_CREATED",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    await send_event(event)
+
     return review
 
 @app.get("/reviews/{product_id}", response_model=List[ReviewShow])
