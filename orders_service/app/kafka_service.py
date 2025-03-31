@@ -19,7 +19,7 @@ async def send_event(event: dict):
     
     try:
         await producer.send('order_events', value=event)
-        print("Событие отправлено!")
+        print(f"Отправлено событие в Kafka: {event}")
     finally:
         await producer.stop()
 

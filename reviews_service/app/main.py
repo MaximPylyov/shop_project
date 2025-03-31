@@ -1,10 +1,12 @@
-from os import getenv
-from fastapi import FastAPI, HTTPException
-from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
+from os import getenv
 from typing import List
+
+from bson import ObjectId
+from fastapi import FastAPI, HTTPException
+from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
+
 from kafka_service import send_event
 
 app = FastAPI(title="Reviews Service")

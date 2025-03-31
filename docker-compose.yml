@@ -43,6 +43,7 @@ services:
       postgres:
         condition: service_healthy
 
+
   reviews_service:
     build: ./reviews_service
     ports:
@@ -95,6 +96,23 @@ services:
       - app-network
     depends_on:
       - zookeeper
+
+  celery_worker:
+    build: ./celery_worker
+    ports:
+      - "8004:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/mydb
+      CELERY_BROKER_URL: redis://redis:6379/0
+      FIXER_ACCESS_KEY: bc2a8a2f269e2ca1e448a3d50ebe4cb7
+    networks:
+      - app-network
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+
+
 
 networks:
   app-network:

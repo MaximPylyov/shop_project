@@ -4,21 +4,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.future import select
 from typing import List
-from models import Order, OrderItem
+from models import Order, OrderItem, ExchangeRate
 from schemas import OrderSchema, OrderUpdate, Item
-import httpx
 from datetime import datetime  # Импортируем datetime
 from sqlalchemy import delete
 from kafka_service import send_event
 
+import httpx
+import aioredis
+import json
+
 app = FastAPI(title="Orders Service")
+
+async def get_redis():
+    redis = aioredis.from_url("redis://redis:6379", encoding="utf-8", decode_responses=True)
+    try:
+        yield redis
+    finally:
+        await redis.close()
 
 @app.on_event("startup")
 async def startup():
     app.state.db = await wait_for_db()
 
 @app.post("/orders/", tags=["Orders"])
-async def create_order(user_id: int, items: List[Item], db: AsyncSession = Depends(get_session)):
+async def create_order(user_id: int, items: List[Item], redis: aioredis.Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
     try:
         prices = {}
         total_prices = {}
@@ -36,8 +46,15 @@ async def create_order(user_id: int, items: List[Item], db: AsyncSession = Depen
                 product = response.json()
                 prices[product_id] = product["price"]
                 total_prices[product_id] = product["price"] * quantity
-        
-        total_price = sum(total_prices.values())
+
+        eur_rate = await redis.get('exchange_rates')
+        if not eur_rate:
+            eur_rate = await db.execute(
+                select(ExchangeRate).order_by(ExchangeRate.created_at.desc()).limit(1)
+            )
+            eur_rate = eur_rate.scalar_one_or_none().rate
+
+        total_price = sum(total_prices.values()) * float(eur_rate)
         new_order = Order(
             user_id=user_id,
             status="CREATED",
@@ -46,16 +63,16 @@ async def create_order(user_id: int, items: List[Item], db: AsyncSession = Depen
             updated_at=datetime.utcnow()   
         )
         db.add(new_order)
+        await db.flush()  
+        
         event = {
             "user_id": user_id,
-            "order_id": new_order.id,
+            "order_id": new_order.id,  
             "total_price": total_price,
             "action": "ORDER_CREATED",
             "timestamp": datetime.utcnow().isoformat()
         }
         await send_event(event)
-
-        await db.flush()
         
         for item in items:
             order_item = OrderItem(order_id=new_order.id, product_id=item.product_id, quantity=item.quantity, price_at_moment=prices[item.product_id])
