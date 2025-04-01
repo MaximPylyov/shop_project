@@ -7,6 +7,7 @@ class OrderSchema(BaseModel):
     user_id: int
     status: str
     total_price: float
+    shipping_cost: Optional[float] = None
     tracking_number: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -16,7 +17,9 @@ class OrderSchema(BaseModel):
 
 class OrderUpdate(BaseModel):
     status: Optional[str] = None
+    shipping_cost: Optional[float] = None
     tracking_number: Optional[str] = None
+
 
 
 class Item(BaseModel):

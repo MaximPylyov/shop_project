@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS orders (
     user_id integer,
     status varchar(16),
     total_price numeric(32,2),
+    shipping_cost numeric(32,2) DEFAULT NULL,
     tracking_number varchar(16) DEFAULT NULL,
     created_at timestamp,
     updated_at timestamp
@@ -29,4 +30,12 @@ CREATE TABLE IF NOT EXISTS order_items (
     product_id INTEGER REFERENCES products(id) ON DELETE CASCADE ON UPDATE CASCADE,
     quantity INTEGER,
     price_at_moment numeric(16,2)
+);
+
+CREATE TABLE IF NOT EXISTS exchange_rates (
+    id SERIAL PRIMARY KEY,
+    base_currency char(3),
+    target_currency char(3),
+    rate float,
+    created_at timestamp
 );
