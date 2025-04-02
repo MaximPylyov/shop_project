@@ -4,9 +4,9 @@ services:
   postgres:
     image: postgres:13
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: mydb
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
@@ -24,7 +24,7 @@ services:
     ports:
       - "8001:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/mydb
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     networks:
       - app-network
     depends_on:
@@ -36,7 +36,7 @@ services:
     ports:
       - "8002:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/mydb
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     networks:
       - app-network
     depends_on:
@@ -102,9 +102,9 @@ services:
     ports:
       - "8004:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/mydb
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CELERY_BROKER_URL: redis://redis:6379/0
-      FIXER_ACCESS_KEY: bc2a8a2f269e2ca1e448a3d50ebe4cb7
+      FIXER_ACCESS_KEY: ${FIXER_ACCESS_KEY}
     networks:
       - app-network
     depends_on:
