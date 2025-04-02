@@ -2,19 +2,6 @@ from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, F
 from database import Base
 
 
-class Category(Base):
-    __tablename__ = "categories"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(32))
-
-class Product(Base):
-    __tablename__ = "products"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(128))
-    price = Column(Numeric(16,2))
-    category_id = Column(Integer, ForeignKey("categories.id")) 
-
-
 class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, index=True)
@@ -30,15 +17,7 @@ class OrderItem(Base):
     __tablename__ = "order_items"
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"))
-    product_id = Column(Integer, ForeignKey("products.id"))
+    product_id = Column(Integer)
     quantity = Column(Integer)
     price_at_moment = Column(Numeric(16,2))
 
-class ExchangeRate(Base):
-    __tablename__ = "exchange_rates"
-    
-    id = Column(Integer, primary_key=True)
-    base_currency = Column(String(3), nullable=False)
-    target_currency = Column(String(3), nullable=False)
-    rate = Column(Float, nullable=False)
-    created_at = Column(DateTime, nullable=False)

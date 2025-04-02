@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.future import select
 from typing import List
-from models import Order, OrderItem, ExchangeRate
+from models import Order, OrderItem
 from schemas import OrderSchema, OrderUpdate, Item
 from datetime import datetime  # Импортируем datetime
 from sqlalchemy import delete
@@ -41,10 +41,10 @@ async def create_order(user_id: int, items: List[Item], redis: aioredis.Redis = 
 
         eur_rate = await redis.get('exchange_rates')
         if not eur_rate:
-            eur_rate = await db.execute(
-                select(ExchangeRate).order_by(ExchangeRate.created_at.desc()).limit(1)
-            )
-            eur_rate = eur_rate.scalar_one_or_none().rate
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://host.docker.internal:8004/exchange-rates/latest")
+                eur_rate = response.json()["rate"]
+
 
         total_price = sum(total_prices.values()) * float(eur_rate)
         new_order = Order(

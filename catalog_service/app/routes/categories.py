@@ -1,16 +1,14 @@
 import json
 from typing import List
-from datetime import datetime
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import  Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.future import select
 from aioredis import Redis
 
-from schemas import Product as ProductSchema, ProductCreate, ProductUpdate, Category as CategorySchema, CategoryCreate, CategoryUpdate 
-from models import Product, Category  
-from database import wait_for_db, get_session
-from kafka_service import send_event
+from schemas import  Category as CategorySchema, CategoryCreate, CategoryUpdate 
+from models import  Category  
+from database import  get_session
 from redis_serivce import get_redis
 
 from fastapi import APIRouter
