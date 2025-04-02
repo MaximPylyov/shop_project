@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 class CategoryBase(BaseModel):
@@ -18,7 +18,7 @@ class Category(CategoryBase):
 
 class ProductBase(BaseModel):
     name: str
-    price: float
+    price: float = Field(gt=0)
     category_id: int
 
 class ProductCreate(ProductBase):
@@ -27,7 +27,7 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(ProductBase):
     name: Optional[str] = None
-    price: Optional[float] = None
+    price: Optional[float] = Field(default=None, gt=0)
     category_id: Optional[int] = None
 
 class Product(ProductBase):

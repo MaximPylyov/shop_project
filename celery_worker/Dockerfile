@@ -7,4 +7,5 @@ RUN pip install -r requirements.txt
 
 COPY ./app .
 
-CMD ["celery", "-A", "tasks", "worker", "--beat", "-l", "info"]
+# Используем shell form чтобы запустить оба процесса
+CMD celery -A tasks worker --beat -l info & python main.py
