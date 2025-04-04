@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS orders (
     id SERIAL PRIMARY KEY,
     user_id integer,
-    status varchar(16),
+    status varchar(32),
     total_price numeric(32,2),
     shipping_cost numeric(32,2) DEFAULT NULL,
     tracking_number varchar(16) DEFAULT NULL,

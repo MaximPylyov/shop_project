@@ -11,7 +11,7 @@ import redis.asyncio as redis
 from aiokafka import AIOKafkaConsumer
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import task_prerun, task_postrun, task_failure
+from celery.signals import task_prerun, task_postrun, task_failure, worker_ready
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -114,20 +114,37 @@ def fetch_exchange_rates():
 def process_order_created(order_data):
     async def _process():
         try:
+            logger.info(f"Processing order {order_data.get('order_id')}")
             shipping_cost = await calculate_shipping_cost(order_data)
+            logger.info(f"Calculated shipping cost for order {order_data.get('order_id')}: {shipping_cost}")
             
             async with httpx.AsyncClient() as client:
-                response = await client.put(
-                    f"http://host.docker.internal:8002/orders/{order_data['order_id']}", 
-                    json={
+                try:
+                    order_id = order_data.get('order_id')
+                    url = f"http://orders_service:8000/orders/{order_id}"
+                    payload = {
                         "status": "DELIVERY_CALCULATED",
                         "shipping_cost": float(shipping_cost) 
                     }
-                )
-                response.raise_for_status()
-                print(f"Shipping cost updated for order {order_data['order_id']}: {shipping_cost}")
+                    logger.info(f"Sending request to {url} with payload: {payload}")
+                    
+                    response = await client.put(url, json=payload)
+                    response.raise_for_status()
+                    logger.info(f"Shipping cost updated for order {order_id}: {shipping_cost}")
+                except httpx.HTTPError as e:
+                    logger.error(f"HTTP error updating order {order_data.get('order_id')}: {str(e)}")
+                    # Попробуем с localhost
+                    try:
+                        url = f"http://localhost:8002/orders/{order_id}"
+                        logger.info(f"Retrying with {url}")
+                        response = await client.put(url, json=payload)
+                        response.raise_for_status()
+                        logger.info(f"Successfully updated using localhost URL")
+                    except Exception as inner_e:
+                        logger.error(f"Retry also failed: {str(inner_e)}")
+                        raise
         except Exception as e:
-            print(f"Error processing order {order_data['order_id']}: {str(e)}")
+            logger.error(f"Error processing order {order_data.get('order_id')}: {str(e)}", exc_info=True)
             raise
     
     asyncio.run(_process())
@@ -138,21 +155,36 @@ async def calculate_shipping_cost(order_data):
 async def start_kafka_consumer():
     while True:
         try:
+            logger.info("Attempting to connect to Kafka...")
             consumer = AIOKafkaConsumer(
                 'order_events',
                 bootstrap_servers='kafka:9092',
-                group_id='celery_worker_group'
+                auto_offset_reset='earliest',
+                enable_auto_commit=True
             )
             await consumer.start()
+            logger.info("Kafka consumer started successfully")
+            
             async for msg in consumer:
-                event_data = json.loads(msg.value.decode())
-                if event_data.get('action') == 'ORDER_CREATED':
-                    process_order_created.delay(event_data)
+                try:
+                    event_data = json.loads(msg.value.decode())
+                    logger.info(f"Received Kafka message: {event_data}")
+                    
+                    if event_data.get('action') == 'ORDER_CREATED':
+                        logger.info(f"Processing ORDER_CREATED event for order_id: {event_data.get('order_id')}")
+                        process_order_created.delay(event_data)
+                except Exception as e:
+                    logger.error(f"Error processing Kafka message: {e}")
         except Exception as e:
-            print(f"Kafka connection error: {e}")
+            logger.error(f"Kafka connection error: {e}")
             await asyncio.sleep(5) 
 
 @celery_app.task(name='start_kafka_listener')
 @log_task_execution
 def start_kafka_listener():
     asyncio.run(start_kafka_consumer())
+
+@worker_ready.connect
+def at_worker_ready(sender, **kwargs):
+    logger.info("Worker is ready, starting Kafka consumer...")
+    start_kafka_listener.delay()
