@@ -9,6 +9,7 @@ services:
       CATALOG_DB: ${CATALOG_DB}
       ORDERS_DB: ${ORDERS_DB}
       CELERY_DB: ${CELERY_DB}
+      USERS_DB: ${USERS_DB}
     ports:
       - "5432:5432"
     volumes:
@@ -42,6 +43,18 @@ services:
       - "8002:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${ORDERS_DB}
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  users_service:
+    build: ./users_service
+    ports:
+      - "8005:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${USERS_DB}
     networks:
       - app-network
     depends_on:
