@@ -19,7 +19,9 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 @router.post("/login")
 async def login(creds: UserLogin, response: Response, db: AsyncSession = Depends(get_session)):
     result = await db.execute(
-        select(models.User).filter(
+        select(models.User)
+        .options(selectinload(models.User.roles).selectinload(models.Role.permissions))
+        .filter(
             and_(
                 models.User.email == creds.email,
             )
@@ -33,16 +35,14 @@ async def login(creds: UserLogin, response: Response, db: AsyncSession = Depends
     is_valid = bcrypt.checkpw(creds.password.encode('utf-8'), db_user.hashed_password.encode('utf-8'))
 
     if is_valid:
-        # Получить все роли пользователя
         user_roles = db_user.roles
 
-        # Получить все разрешения пользователя через его роли
         user_permissions = [permission for role in user_roles for permission in role.permissions]
 
         token_data = {
             "sub": str(db_user.id),
-            "roles": [role.name for role in user_roles],  # Список названий ролей
-            "permissions": [permission.name for permission in user_permissions],  # Список названий разрешений
+            "roles": [role.name for role in user_roles],  
+            "permissions": [permission.name for permission in user_permissions],  
             "email": db_user.email
         }
         access_token = create_access_token(token_data)

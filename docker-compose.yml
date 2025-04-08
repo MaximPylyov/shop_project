@@ -55,6 +55,7 @@ services:
       - "8005:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${USERS_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     networks:
       - app-network
     depends_on:

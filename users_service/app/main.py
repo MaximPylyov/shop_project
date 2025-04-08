@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from database import  wait_for_db  # Импортируем необходимые функции и классы
-from routes import auth, roles, users
+from routes import auth, roles, users, permissions
 
 app = FastAPI(title="User/Auth Service")
 
@@ -11,3 +11,4 @@ async def startup():
 app.include_router(auth.router)
 app.include_router(roles.router)
 app.include_router(users.router)
+app.include_router(permissions.router)

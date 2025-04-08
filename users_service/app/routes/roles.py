@@ -21,7 +21,7 @@ async def get_roles(db: AsyncSession = Depends(get_session)):
         return roles
 
     except SQLAlchemyError:
-        raise HTTPException(status_code=500, detail="Ошибка при отборе списка пользователей")
+        raise HTTPException(status_code=500, detail="Ошибка при отборе списка ролей")
 
 @router.post("/", response_model=schemas.Role)
 async def create_role(role: schemas.RoleCreate, db: AsyncSession = Depends(get_session)):
