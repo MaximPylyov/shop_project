@@ -31,7 +31,7 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     'fetch-exchange-rates': {
         'task': 'tasks.fetch_exchange_rates',
-        'schedule': crontab(minute='*/10'),
+        'schedule': crontab(minute=0),
     },
 }
 
