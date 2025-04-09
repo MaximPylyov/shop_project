@@ -9,6 +9,7 @@ from schemas import Product as ProductSchema, ProductCreate, ProductUpdate
 from models import Product, Category  
 from database import  get_session
 from kafka_service import send_event
+from auth_services import get_token_from_cookie, get_current_permissions
 
 from fastapi import APIRouter
 
@@ -36,8 +37,14 @@ async def get_product_detail(product_id: int, db: AsyncSession = Depends(get_ses
         raise HTTPException(status_code=500, detail="Ошибка при получении товара")
 
 @router.post("/", response_model=ProductSchema)
-async def create_product(product: ProductCreate, db: AsyncSession = Depends(get_session)):
+async def create_product(
+    product: ProductCreate, 
+    permissions: set = Depends(get_current_permissions),
+    db: AsyncSession = Depends(get_session)
+):
     try:
+        if 'create_product' not in permissions:
+            raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
         result = await db.execute(select(Category).where(Category.id == product.category_id))
         category = result.scalar_one_or_none()
         if category is None:

@@ -1,8 +1,19 @@
 from fastapi import FastAPI
-from database import  wait_for_db  # Импортируем необходимые функции и классы
+from fastapi.middleware.cors import CORSMiddleware
+from database import wait_for_db
 from routes import auth, roles, users, permissions
 
 app = FastAPI(title="User/Auth Service")
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  
+    allow_credentials=True, 
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+    expose_headers=["*"]
+)
 
 @app.on_event("startup")
 async def startup():

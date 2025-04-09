@@ -1,28 +1,53 @@
-from fastapi import APIRouter, Depends, Response, HTTPException, Cookie
-from database import  get_session
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import selectinload
-from sqlalchemy import select, and_
-from  typing import List, Set
-from uuid import UUID
-import models
-from auth_services import create_access_token, create_refresh_token, verify_token
-from auth_services import ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS
-from schemas import UserLogin
-from logger import logger
-from kafka_service import send_event
 from datetime import datetime
+from typing import List, Set
+from uuid import UUID
+
 import bcrypt
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, Request
+from sqlalchemy import and_, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-
+from auth_services import (ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS,
+                         create_access_token, create_refresh_token, verify_token)
+from database import get_session
+from kafka_service import send_event
+from logger import logger
+import models
+from schemas import UserLogin
 
 from fastapi import APIRouter
 
 
-
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
+async def clear_access_token(response):
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="lax"
+    )
+    return response
+
+async def clear_tokens(response: Response):
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        secure=False,
+        httponly=True,
+        samesite="lax"
+    )
+    response.delete_cookie(
+        key="refresh_token",
+        path="/",
+        secure=False,
+        httponly=True,
+        samesite="lax"
+    )
+    return response
 
 @router.post("/login")
 async def login(creds: UserLogin, response: Response, db: AsyncSession = Depends(get_session)):
@@ -153,3 +178,21 @@ async def refresh_tokens(
     )
     
     return {"message": "Токены успешно обновлены"}
+
+@router.post("/logout")
+async def logout(request: Request, response: Response):
+    # Получаем токен из разных мест
+    token = None
+    auth_header = request.headers.get("Authorization")
+    
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:]  # Для запросов с Authorization header
+    else:
+        token = request.cookies.get("access_token")  # Для запросов с куками
+        if token and token.startswith("Bearer "):
+            token = token[7:]
+
+    # Даже если токен не найден, всё равно очищаем куки
+    await clear_tokens(response)
+    
+    return {"message": "Успешный выход из системы"}

@@ -1,16 +1,18 @@
-from fastapi import APIRouter, Depends, Response, HTTPException
-from database import  get_session
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import selectinload
-from sqlalchemy import select, and_
-from  typing import List, Set
+import bcrypt
+import uuid
+from typing import List, Set
 from uuid import UUID
-import models, schemas
-from auth_services import create_access_token
-import bcrypt, uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import and_, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from auth_services import create_access_token
+from database import get_session
+import models
+import schemas
 
 router = APIRouter(prefix="/permissions", tags=["Permission"])
 
