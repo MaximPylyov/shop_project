@@ -6,6 +6,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 from  typing import List, Set
 from uuid import UUID
+from kafka_service import send_event
+from datetime import datetime
 import models, schemas
 import bcrypt
 import uuid
@@ -46,6 +48,14 @@ async def create_user(user: schemas.UserCreate,  db: AsyncSession = Depends(get_
         db.add(db_user)
         await db.commit()
         await db.refresh(db_user, ["roles"])
+        event = {
+            "user_id": str(db_user.id),
+            "email": db_user.email,
+            "action": "USER_REGISTERED",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await send_event(event)
+
         return db_user
     except SQLAlchemyError as e:
         await db.rollback()

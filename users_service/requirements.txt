@@ -8,3 +8,5 @@ aioredis>=2.0.1
 bcrypt>=4.3.0
 python-jose[cryptography]>=3.3.0
 email_validator>=2.2.0
+python-json-logger>=3.3.0
+aiokafka>=0.12.0
