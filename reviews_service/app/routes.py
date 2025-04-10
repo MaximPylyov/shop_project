@@ -4,16 +4,20 @@ from os import getenv
 from typing import List
 
 from bson import ObjectId
-from fastapi import FastAPI, HTTPException, APIRouter
+from fastapi import FastAPI, HTTPException, APIRouter, Depends
 
+from auth_services import get_current_permissions
 from kafka_service import send_event
 from mongo_service import reviews_collection
 from schemas import ReviewCreate, ReviewShow
 
+
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
 @router.post("/", response_model=ReviewCreate)
-async def create_review(review: ReviewCreate):
+async def create_review(review: ReviewCreate, permissions: set = Depends(get_current_permissions)):
+    if 'create_review' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     review_dict = review.dict()
     review_dict["_id"] = str(ObjectId())
     review_dict["created_at"] = datetime.utcnow()
@@ -30,14 +34,18 @@ async def create_review(review: ReviewCreate):
     return review
 
 @router.get("/{product_id}", response_model=List[ReviewShow])
-async def get_reviews(product_id: int):
+async def get_reviews(product_id: int, permissions: set = Depends(get_current_permissions)):
+    if 'get_reviews' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     reviews = await reviews_collection.find({"product_id": product_id}).to_list()
     if not reviews:
         raise HTTPException(status_code=404, detail="Не найдено отзывов для этого товара")
     return [ReviewShow(id=str(review["_id"]), **review) for review in reviews]
 
 @router.delete("/{review_id}")
-async def delete_review(review_id: str):
+async def delete_review(review_id: str, permissions: set = Depends(get_current_permissions)):
+    if 'delete_review' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     result = await reviews_collection.delete_one({"_id": review_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Отзыв не найден")

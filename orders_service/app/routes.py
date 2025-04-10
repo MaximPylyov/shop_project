@@ -10,6 +10,7 @@ from datetime import datetime  # Импортируем datetime
 from sqlalchemy import delete
 from kafka_service import send_event
 from redis_service import get_redis
+from auth_services import get_current_permissions
 
 import httpx
 import aioredis
@@ -20,7 +21,9 @@ from fastapi import APIRouter
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 @router.post("/")
-async def create_order(user_id: int, items: List[Item], redis: aioredis.Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+async def create_order(user_id: int, items: List[Item], permissions: set = Depends(get_current_permissions), redis: aioredis.Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+    if 'create_order' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         prices = {}
         total_prices = {}
@@ -78,7 +81,9 @@ async def create_order(user_id: int, items: List[Item], redis: aioredis.Redis = 
         raise HTTPException(status_code=500, detail=f"Ошибка при создании заказа: {e}")
 
 @router.delete("/{order_id}")
-async def delete_order(order_id: int, db: AsyncSession = Depends(get_session)):
+async def delete_order(order_id: int, permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'delete_order' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(Order).filter(Order.id == order_id)
@@ -100,7 +105,9 @@ async def delete_order(order_id: int, db: AsyncSession = Depends(get_session)):
         raise HTTPException(status_code=500, detail="Ошибка базы данных при удалении заказа")
 
 @router.patch("/{order_id}")
-async def update_order_status(order_id: int, status: str, db: AsyncSession = Depends(get_session)):
+async def update_order_status(order_id: int, status: str, permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'update_order_status' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Order).where(Order.id == order_id))
         db_order = result.scalar_one_or_none()
@@ -119,8 +126,12 @@ async def update_order_status(order_id: int, status: str, db: AsyncSession = Dep
         await db.rollback()
         raise HTTPException(status_code=500, detail="Ошибка базы данных при обновлении заказа")
 
+
+
 @router.get("/{order_id}", response_model=OrderSchema)
-async def get_order(order_id: int, db: AsyncSession = Depends(get_session)):
+async def get_order(order_id: int, permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'view_orders' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Order).where(Order.id == order_id))
         db_order = result.scalar_one_or_none()
@@ -135,7 +146,9 @@ async def get_order(order_id: int, db: AsyncSession = Depends(get_session)):
 
 
 @router.put("/{order_id}")
-async def modif_order(order_id: int, order: OrderUpdate, db: AsyncSession = Depends(get_session)):
+async def modif_order(order_id: int, order: OrderUpdate, permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'update_order' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Order).where(Order.id == order_id))
         db_order = result.scalar_one_or_none()
@@ -154,3 +167,14 @@ async def modif_order(order_id: int, order: OrderUpdate, db: AsyncSession = Depe
     except SQLAlchemyError:
         await db.rollback()
         raise HTTPException(status_code=500, detail="Ошибка базы данных при изменении заказа")
+
+@router.get("/", response_model=List[OrderSchema])
+async def get_all_orders(permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'view_orders' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
+    try:
+        result = await db.execute(select(Order))
+        orders = result.scalars().all()
+        return orders
+    except SQLAlchemyError:
+        raise HTTPException(status_code=500, detail="Ошибка базы данных при получении заказов")

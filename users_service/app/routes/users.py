@@ -11,6 +11,7 @@ from datetime import datetime
 import models, schemas
 import bcrypt
 import uuid
+from auth_services import get_current_roles
 
 from fastapi import APIRouter
 
@@ -18,7 +19,9 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 
 @router.get("/", response_model=List[schemas.User])
-async def get_users(db: AsyncSession = Depends(get_session)):
+async def get_users(roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     result = await db.execute(
         select(models.User).options(selectinload(models.User.roles))
     )
@@ -61,8 +64,10 @@ async def create_user(user: schemas.UserCreate,  db: AsyncSession = Depends(get_
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Ошибка при создании пользователя: {e}")
 
-@router.put("/{user_id}", response_model=schemas.User)
-async def edit_user(user_id: UUID, user: schemas.UserUpdate, db: AsyncSession = Depends(get_session)):
+@router.put("/{user_id}",  response_model=schemas.User)
+async def edit_user(user_id: UUID, user: schemas.UserUpdate, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(models.User)
@@ -93,7 +98,9 @@ async def edit_user(user_id: UUID, user: schemas.UserUpdate, db: AsyncSession = 
         raise HTTPException(status_code=500, detail="Ошибка при обновлении пользователя")
 
 @router.delete("/{user_id}")
-async def delete_user(user_id: UUID, db: AsyncSession = Depends(get_session)):
+async def delete_user(user_id: UUID, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
 
         result = await db.execute(
@@ -115,8 +122,9 @@ async def delete_user(user_id: UUID, db: AsyncSession = Depends(get_session)):
 
 
 @router.get("/{user_id}", response_model=schemas.User)
-async def get_user(user_id: UUID, db: AsyncSession = Depends(get_session)):
-    
+async def get_user(user_id: UUID, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     result = await db.execute(
         select(models.User)
         .options(selectinload(models.User.roles))

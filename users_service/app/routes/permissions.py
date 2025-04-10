@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from auth_services import create_access_token
+from auth_services import get_current_roles
 from database import get_session
 import models
 import schemas
@@ -17,7 +17,9 @@ import schemas
 router = APIRouter(prefix="/permissions", tags=["Permission"])
 
 @router.get("/", response_model=List[schemas.Permission])
-async def get_permissions(db: AsyncSession = Depends(get_session)):
+async def get_permissions(roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(models.Permission).options(selectinload(models.Permission.roles))
@@ -29,7 +31,9 @@ async def get_permissions(db: AsyncSession = Depends(get_session)):
 
 
 @router.post("/", response_model=schemas.Permission)
-async def create_permission(permission: schemas.PermissionCreate, db: AsyncSession = Depends(get_session)):
+async def create_permission(permission: schemas.PermissionCreate, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(models.Permission).filter(models.Permission.name == permission.name)
@@ -52,7 +56,9 @@ async def create_permission(permission: schemas.PermissionCreate, db: AsyncSessi
     
 
 @router.put("/{permission_id}", response_model=schemas.Permission)
-async def edit_permission(permission_id: UUID, permission: schemas.PermissionUpdate, db: AsyncSession = Depends(get_session)):
+async def edit_permission(permission_id: UUID, permission: schemas.PermissionUpdate, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         if permission.name:
             existing_permission = await db.execute(
@@ -88,7 +94,9 @@ async def edit_permission(permission_id: UUID, permission: schemas.PermissionUpd
 
 
 @router.delete("/{permission_id}")
-async def delete_permission(permission_id: UUID, db: AsyncSession = Depends(get_session)):
+async def delete_permission(permission_id: UUID, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(models.Permission)
@@ -119,8 +127,11 @@ async def delete_permission(permission_id: UUID, db: AsyncSession = Depends(get_
 async def assign_permission_to_role(
     permission_id: UUID,
     role_id: UUID,
+    roles: set = Depends(get_current_roles),
     db: AsyncSession = Depends(get_session)
 ):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         permission_result = await db.execute(
             select(models.Permission).filter(models.Permission.id == permission_id)
@@ -166,8 +177,11 @@ async def assign_permission_to_role(
 async def remove_permission_from_role(
     permission_id: UUID,
     role_id: UUID,
+    roles: set = Depends(get_current_roles),
     db: AsyncSession = Depends(get_session)
 ):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(models.RolePermission).filter(

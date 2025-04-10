@@ -8,11 +8,14 @@ from  typing import List, Set
 from uuid import UUID
 import models, schemas
 import uuid
+from auth_services import get_current_roles
 
 router = APIRouter(prefix="/roles", tags=["Roles"])  
 
 @router.get("/", response_model=List[schemas.Role])
-async def get_roles(db: AsyncSession = Depends(get_session)):
+async def get_roles(roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(models.Role).options(selectinload(models.Role.users))
@@ -24,7 +27,9 @@ async def get_roles(db: AsyncSession = Depends(get_session)):
         raise HTTPException(status_code=500, detail="Ошибка при отборе списка ролей")
 
 @router.post("/", response_model=schemas.Role)
-async def create_role(role: schemas.RoleCreate, db: AsyncSession = Depends(get_session)):
+async def create_role(role: schemas.RoleCreate, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(models.Role).filter(models.Role.name == role.name)
@@ -48,7 +53,9 @@ async def create_role(role: schemas.RoleCreate, db: AsyncSession = Depends(get_s
 
 
 @router.put("/{role_id}", response_model=schemas.Role)
-async def edit_role(role_id: UUID, role: schemas.RoleUpdate, db: AsyncSession = Depends(get_session)):
+async def edit_role(role_id: UUID, role: schemas.RoleUpdate, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         if role.name:
             existing_role = await db.execute(
@@ -82,7 +89,9 @@ async def edit_role(role_id: UUID, role: schemas.RoleUpdate, db: AsyncSession = 
         raise HTTPException(status_code=500, detail=f"Ошибка при обновлении роли {e}")
 
 @router.delete("/{role_id}")
-async def delete_role(role_id: UUID,  db: AsyncSession = Depends(get_session)):
+async def delete_role(role_id: UUID, roles: set = Depends(get_current_roles),  db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(models.Role)
@@ -110,7 +119,9 @@ async def delete_role(role_id: UUID,  db: AsyncSession = Depends(get_session)):
 
 
 @router.post("/add/{role_id}/users/{user_id}") 
-async def assign_role(user_id: UUID, role_id: UUID, db: AsyncSession = Depends(get_session)):
+async def assign_role(user_id: UUID, role_id: UUID, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         stmt = select(models.User).options(selectinload(models.User.roles)).where(models.User.id == user_id)
         result = await db.execute(stmt)
@@ -144,7 +155,9 @@ async def assign_role(user_id: UUID, role_id: UUID, db: AsyncSession = Depends(g
         raise HTTPException(status_code=500, detail=f"Ошибка при назначении роли {e}")
 
 @router.delete("/remove/{role_id}/users/{user_id}")
-async def remove_role(user_id: UUID, role_id: UUID, db: AsyncSession = Depends(get_session)):
+async def remove_role(user_id: UUID, role_id: UUID, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         stmt = select(models.User).options(selectinload(models.User.roles)).where(models.User.id == user_id)
         result = await db.execute(stmt)

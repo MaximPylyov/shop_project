@@ -10,13 +10,16 @@ from schemas import  Category as CategorySchema, CategoryCreate, CategoryUpdate
 from models import  Category  
 from database import  get_session
 from redis_serivce import get_redis
+from auth_services import get_current_permissions, get_current_roles
 
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
 @router.get("/categories/", response_model=List[CategorySchema])
-async def get_categories(redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+async def get_categories(roles: set = Depends(get_current_roles), redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+    if not ('Admin' in roles or 'Manager' in roles):
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     categories = await redis.get("categories")
     if categories:
         return [CategorySchema(**item) for item in json.loads(categories)]
@@ -30,7 +33,9 @@ async def get_categories(redis: Redis = Depends(get_redis), db: AsyncSession = D
             raise HTTPException(status_code=500, detail="Ошибка при получении списка категорий")
 
 @router.get("/categories/{category_id}", response_model=CategorySchema)
-async def get_category_detail(category_id: int, db: AsyncSession = Depends(get_session)):
+async def get_category_detail(category_id: int, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if not ('Admin' in roles or 'Manager' in roles):
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Category).where(Category.id == category_id))
         db_category = result.scalar_one_or_none()
@@ -43,7 +48,9 @@ async def get_category_detail(category_id: int, db: AsyncSession = Depends(get_s
         raise HTTPException(status_code=500, detail="Ошибка при получении категории")
 
 @router.post("/categories/", response_model=CategorySchema)
-async def create_category(category: CategoryCreate, redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+async def create_category(category: CategoryCreate, roles: set = Depends(get_current_roles), redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+    if not ('Admin' in roles or 'Manager' in roles):
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         db_category = Category(**category.model_dump())
         db.add(db_category)
@@ -56,7 +63,9 @@ async def create_category(category: CategoryCreate, redis: Redis = Depends(get_r
         raise HTTPException(status_code=500, detail="Ошибка при создании категории")
 
 @router.put("/categories/{category_id}", response_model=CategorySchema)
-async def update_category(category_id: int, product: CategoryUpdate, redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+async def update_category(category_id: int, product: CategoryUpdate, roles: set = Depends(get_current_roles), redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+    if not ('Admin' in roles or 'Manager' in roles):
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Category).where(Category.id == category_id))
         db_category = result.scalar_one_or_none()
@@ -73,7 +82,9 @@ async def update_category(category_id: int, product: CategoryUpdate, redis: Redi
         raise HTTPException(status_code=500, detail="Ошибка при обновлении категории")
 
 @router.delete("/categories/{category_id}")
-async def delete_category(category_id: int, db: AsyncSession = Depends(get_session)):
+async def delete_category(category_id: int, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
+    if not ('Admin' in roles or 'Manager' in roles):
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
             select(Category).filter(Category.id == category_id)
