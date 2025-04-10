@@ -9,6 +9,7 @@ from schemas import Product as ProductSchema, ProductCreate, ProductUpdate
 from models import Product, Category  
 from database import  get_session
 from kafka_service import send_event
+from auth_services import get_token_from_cookie, get_current_permissions
 
 from fastapi import APIRouter
 
@@ -16,7 +17,9 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 
 @router.get("/", response_model=List[ProductSchema])
-async def get_products(db: AsyncSession = Depends(get_session)):
+async def get_products(permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'view_catalog' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Product))
         db_products = result.scalars().all()
@@ -25,7 +28,9 @@ async def get_products(db: AsyncSession = Depends(get_session)):
         raise HTTPException(status_code=500, detail="Ошибка при получении товаров")
 
 @router.get("/{product_id}", response_model=ProductSchema)
-async def get_product_detail(product_id: int, db: AsyncSession = Depends(get_session)):
+async def get_product_detail(product_id: int, permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'view_catalog' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Product).where(Product.id == product_id))
         db_product = result.scalar_one_or_none()
@@ -36,8 +41,14 @@ async def get_product_detail(product_id: int, db: AsyncSession = Depends(get_ses
         raise HTTPException(status_code=500, detail="Ошибка при получении товара")
 
 @router.post("/", response_model=ProductSchema)
-async def create_product(product: ProductCreate, db: AsyncSession = Depends(get_session)):
+async def create_product(
+    product: ProductCreate, 
+    permissions: set = Depends(get_current_permissions),
+    db: AsyncSession = Depends(get_session)
+):
     try:
+        if 'create_product' not in permissions:
+            raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
         result = await db.execute(select(Category).where(Category.id == product.category_id))
         category = result.scalar_one_or_none()
         if category is None:
@@ -53,7 +64,9 @@ async def create_product(product: ProductCreate, db: AsyncSession = Depends(get_
         raise HTTPException(status_code=500, detail="Ошибка при создании товара")
 
 @router.put("/{product_id}", response_model=ProductSchema)
-async def update_product(product_id: int, product: ProductUpdate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_session)):
+async def update_product(product_id: int, product: ProductUpdate, permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'update_product' not in permissions:
+        raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Product).where(Product.id == product_id))
         db_product = result.scalar_one_or_none()
@@ -94,8 +107,10 @@ async def update_product(product_id: int, product: ProductUpdate, background_tas
         raise HTTPException(status_code=500, detail="Ошибка при обновление товара")
 
 @router.delete("/{product_id}")
-async def delete_product(product_id: int, db: AsyncSession = Depends(get_session)):
+async def delete_product(product_id: int, permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
     try:
+        if 'delete_product' not in permissions:
+            raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
         result = await db.execute(
             select(Product).filter(Product.id == product_id)
         )

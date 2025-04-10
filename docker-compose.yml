@@ -9,6 +9,7 @@ services:
       CATALOG_DB: ${CATALOG_DB}
       ORDERS_DB: ${ORDERS_DB}
       CELERY_DB: ${CELERY_DB}
+      USERS_DB: ${USERS_DB}
     ports:
       - "5432:5432"
     volumes:
@@ -30,6 +31,7 @@ services:
       - "8001:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${CATALOG_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     networks:
       - app-network
     depends_on:
@@ -42,6 +44,20 @@ services:
       - "8002:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${ORDERS_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  users_service:
+    build: ./users_service
+    ports:
+      - "8005:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${USERS_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     networks:
       - app-network
     depends_on:
@@ -54,6 +70,7 @@ services:
       - "8003:8000"
     environment:
       MONGODB_URL: mongodb://mongo:27017
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     networks:
       - app-network
 

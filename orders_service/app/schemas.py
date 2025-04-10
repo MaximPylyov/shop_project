@@ -1,10 +1,11 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 class OrderSchema(BaseModel):
     id: int
-    user_id: int
+    user_id: UUID
     status: str
     total_price: float
     shipping_cost: Optional[float] = None
