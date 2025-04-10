@@ -118,35 +118,42 @@ def process_order_created(order_data):
             shipping_cost = await calculate_shipping_cost(order_data)
             logger.info(f"Calculated shipping cost for order {order_data.get('order_id')}: {shipping_cost}")
             
-            async with httpx.AsyncClient() as client:
-                try:
-                    order_id = order_data.get('order_id')
-                    url = f"http://orders_service:8000/orders/{order_id}"
-                    payload = {
-                        "status": "DELIVERY_CALCULATED",
-                        "shipping_cost": float(shipping_cost) 
-                    }
-                    logger.info(f"Sending request to {url} with payload: {payload}")
-                    
-                    response = await client.put(url, json=payload)
-                    response.raise_for_status()
-                    logger.info(f"Shipping cost updated for order {order_id}: {shipping_cost}")
-                except httpx.HTTPError as e:
-                    logger.error(f"HTTP error updating order {order_data.get('order_id')}: {str(e)}")
-                    # Попробуем с localhost
+            token = order_data.get('token', '')
+            headers = {"Cookie": f"access_token={token}"}  # Используем полный токен как есть
+            
+            order_id = order_data.get('order_id')
+            payload = {
+                "status": "DELIVERY_CALCULATED",
+                "shipping_cost": float(shipping_cost) 
+            }
+
+            urls = [
+                "http://orders_service:8000",
+                "http://localhost:8002",
+                "http://host.docker.internal:8002"
+            ]
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                last_error = None
+                for base_url in urls:
                     try:
-                        url = f"http://localhost:8002/orders/{order_id}"
-                        logger.info(f"Retrying with {url}")
-                        response = await client.put(url, json=payload)
+                        url = f"{base_url}/orders/{order_id}"
+                        logger.info(f"Trying to connect to {url}")
+                        response = await client.put(url, json=payload, headers=headers)
                         response.raise_for_status()
-                        logger.info(f"Successfully updated using localhost URL")
-                    except Exception as inner_e:
-                        logger.error(f"Retry also failed: {str(inner_e)}")
-                        raise
+                        logger.info(f"Successfully updated order at {url}")
+                        return
+                    except Exception as e:
+                        last_error = e
+                        logger.warning(f"Failed to connect to {url}: {str(e)}")
+                        continue
+
+                raise Exception(f"Failed to update order status. Last error: {str(last_error)}")
+
         except Exception as e:
             logger.error(f"Error processing order {order_data.get('order_id')}: {str(e)}", exc_info=True)
             raise
-    
+
     asyncio.run(_process())
 
 async def calculate_shipping_cost(order_data):
@@ -159,6 +166,7 @@ async def start_kafka_consumer():
             consumer = AIOKafkaConsumer(
                 'order_events',
                 bootstrap_servers='kafka:9092',
+                group_id='order_processor_group',
                 auto_offset_reset='earliest',
                 enable_auto_commit=True
             )

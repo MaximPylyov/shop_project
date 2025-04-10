@@ -1,4 +1,5 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
+from uuid import UUID
 from database import  get_session  # Импортируем необходимые функции и классы
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
@@ -10,7 +11,7 @@ from datetime import datetime  # Импортируем datetime
 from sqlalchemy import delete
 from kafka_service import send_event
 from redis_service import get_redis
-from auth_services import get_current_permissions
+from auth_services import get_current_permissions, get_current_user_id
 
 import httpx
 import aioredis
@@ -21,21 +22,37 @@ from fastapi import APIRouter
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 @router.post("/")
-async def create_order(user_id: int, items: List[Item], permissions: set = Depends(get_current_permissions), redis: aioredis.Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+async def create_order(
+    request: Request,
+    items: List[Item], 
+    user_id: UUID = Depends(get_current_user_id), 
+    permissions: set = Depends(get_current_permissions), 
+    redis: aioredis.Redis = Depends(get_redis), 
+    db: AsyncSession = Depends(get_session)
+):
     if 'create_order' not in permissions:
         raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
+
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Отсутствует токен авторизации")
+    
     try:
         prices = {}
         total_prices = {}
-        async with httpx.AsyncClient() as client:  # Создаем асинхронный клиент
+        headers = {"Cookie": f"access_token={token}"}
+        async with httpx.AsyncClient() as client:  
             for item in items:
                 product_id = item.product_id
                 quantity = item.quantity
                 try:
-                    response = await client.get(f"http://host.docker.internal:8001/products/{product_id}")
+                    response = await client.get(
+                        f"http://host.docker.internal:8001/products/{product_id}",
+                        headers=headers
+                    )
                     response.raise_for_status()
                 except httpx.HTTPStatusError as e:
-                    raise HTTPException(status_code=e.response.status_code, detail=f"Ошибка при получении товара")
+                    raise HTTPException(status_code=e.response.status_code, detail=f"Ошибка при получении товара {e}")
                 except httpx.ConnectError:
                     raise HTTPException(status_code=503, detail="Сервер продуктов недоступен")
                 product = response.json()
@@ -47,7 +64,6 @@ async def create_order(user_id: int, items: List[Item], permissions: set = Depen
             async with httpx.AsyncClient() as client:
                 response = await client.get("http://host.docker.internal:8004/exchange-rates/latest")
                 eur_rate = response.json()["rate"]
-
 
         total_price = sum(total_prices.values()) * float(eur_rate)
         new_order = Order(
@@ -61,11 +77,12 @@ async def create_order(user_id: int, items: List[Item], permissions: set = Depen
         await db.flush()  
         
         event = {
-            "user_id": user_id,
+            "user_id": str(user_id),
             "order_id": new_order.id,  
             "total_price": total_price,
             "action": "ORDER_CREATED",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "token": token
         }
         await send_event(event)
         
