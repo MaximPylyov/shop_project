@@ -44,6 +44,7 @@ services:
       - "8002:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${ORDERS_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     networks:
       - app-network
     depends_on:
@@ -69,6 +70,7 @@ services:
       - "8003:8000"
     environment:
       MONGODB_URL: mongodb://mongo:27017
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     networks:
       - app-network
 

@@ -39,3 +39,5 @@ async def get_current_permissions(token: str = Depends(get_token_from_cookie)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
+
+

@@ -3,6 +3,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
+from uuid import UUID
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
@@ -19,7 +20,7 @@ async def get_token_from_cookie(request: Request) -> str:
     return token
 
 
-async def get_current_roles(token: str = Depends(get_token_from_cookie)):
+async def get_current_roles(token: str = Depends(get_token_from_cookie)) -> set:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         role = payload.get("roles")
@@ -29,7 +30,7 @@ async def get_current_roles(token: str = Depends(get_token_from_cookie)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
-async def get_current_permissions(token: str = Depends(get_token_from_cookie)):
+async def get_current_permissions(token: str = Depends(get_token_from_cookie)) -> set:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         permissions = payload.get("permissions")
@@ -39,3 +40,14 @@ async def get_current_permissions(token: str = Depends(get_token_from_cookie)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
+async def get_current_user_id(token: str = Depends(get_token_from_cookie)) -> UUID:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="ID пользователя не найден в токене")
+        return UUID(user_id)
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Неверные учетные данные")
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Некорректный формат ID пользователя")
