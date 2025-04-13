@@ -181,18 +181,16 @@ async def refresh_tokens(
 
 @router.post("/logout")
 async def logout(request: Request, response: Response):
-    # Получаем токен из разных мест
     token = None
     auth_header = request.headers.get("Authorization")
     
     if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header[7:]  # Для запросов с Authorization header
+        token = auth_header[7:]  
     else:
-        token = request.cookies.get("access_token")  # Для запросов с куками
+        token = request.cookies.get("access_token")  
         if token and token.startswith("Bearer "):
             token = token[7:]
 
-    # Даже если токен не найден, всё равно очищаем куки
     await clear_tokens(response)
     
     return {"message": "Успешный выход из системы"}

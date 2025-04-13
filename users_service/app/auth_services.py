@@ -3,7 +3,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
-
+from uuid import UUID
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
@@ -52,6 +52,16 @@ async def get_token_from_cookie(request: Request) -> str:
         token = token[7:]
     return token
 
+
+async def get_current_user_id(token: str = Depends(get_token_from_cookie)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Неверные учетные данные")
+        return UUID(user_id)
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Неверные учетные данные")
 
 async def get_current_roles(token: str = Depends(get_token_from_cookie)):
     try:

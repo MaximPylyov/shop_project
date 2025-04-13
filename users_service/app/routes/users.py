@@ -11,7 +11,7 @@ from datetime import datetime
 import models, schemas
 import bcrypt
 import uuid
-from auth_services import get_current_roles
+from auth_services import get_current_roles, get_current_user_id
 
 from fastapi import APIRouter
 
@@ -65,8 +65,9 @@ async def create_user(user: schemas.UserCreate,  db: AsyncSession = Depends(get_
         raise HTTPException(status_code=500, detail=f"Ошибка при создании пользователя: {e}")
 
 @router.put("/{user_id}",  response_model=schemas.User)
-async def edit_user(user_id: UUID, user: schemas.UserUpdate, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
-    if 'Admin' not in roles:
+async def edit_user(user_id: UUID, user: schemas.UserUpdate, roles: set = Depends(get_current_roles),
+                     current_user_id: UUID = Depends(get_current_user_id), db: AsyncSession = Depends(get_session)):
+    if 'Admin' not in roles and current_user_id != user_id:
         raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(

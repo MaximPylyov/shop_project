@@ -17,8 +17,8 @@ from fastapi import APIRouter
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
 @router.get("/categories/", response_model=List[CategorySchema])
-async def get_categories(roles: set = Depends(get_current_roles), redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
-    if not ('Admin' in roles or 'Manager' in roles):
+async def get_categories(permissions: set = Depends(get_current_permissions), redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+    if 'get_categories' not in permissions:
         raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     categories = await redis.get("categories")
     if categories:
@@ -33,8 +33,8 @@ async def get_categories(roles: set = Depends(get_current_roles), redis: Redis =
             raise HTTPException(status_code=500, detail="Ошибка при получении списка категорий")
 
 @router.get("/categories/{category_id}", response_model=CategorySchema)
-async def get_category_detail(category_id: int, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
-    if not ('Admin' in roles or 'Manager' in roles):
+async def get_category_detail(category_id: int, permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'get_categories' not in permissions:
         raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Category).where(Category.id == category_id))
@@ -48,8 +48,8 @@ async def get_category_detail(category_id: int, roles: set = Depends(get_current
         raise HTTPException(status_code=500, detail="Ошибка при получении категории")
 
 @router.post("/categories/", response_model=CategorySchema)
-async def create_category(category: CategoryCreate, roles: set = Depends(get_current_roles), redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
-    if not ('Admin' in roles or 'Manager' in roles):
+async def create_category(category: CategoryCreate, permissions: set = Depends(get_current_permissions), redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+    if 'create_category' not in permissions:
         raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         db_category = Category(**category.model_dump())
@@ -63,8 +63,8 @@ async def create_category(category: CategoryCreate, roles: set = Depends(get_cur
         raise HTTPException(status_code=500, detail="Ошибка при создании категории")
 
 @router.put("/categories/{category_id}", response_model=CategorySchema)
-async def update_category(category_id: int, product: CategoryUpdate, roles: set = Depends(get_current_roles), redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
-    if not ('Admin' in roles or 'Manager' in roles):
+async def update_category(category_id: int, product: CategoryUpdate, permissions: set = Depends(get_current_permissions), redis: Redis = Depends(get_redis), db: AsyncSession = Depends(get_session)):
+    if 'update_category' not in permissions:
         raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(select(Category).where(Category.id == category_id))
@@ -82,8 +82,8 @@ async def update_category(category_id: int, product: CategoryUpdate, roles: set 
         raise HTTPException(status_code=500, detail="Ошибка при обновлении категории")
 
 @router.delete("/categories/{category_id}")
-async def delete_category(category_id: int, roles: set = Depends(get_current_roles), db: AsyncSession = Depends(get_session)):
-    if not ('Admin' in roles or 'Manager' in roles):
+async def delete_category(category_id: int, permissions: set = Depends(get_current_permissions), db: AsyncSession = Depends(get_session)):
+    if 'delete_category' not in permissions:
         raise HTTPException(status_code=403, detail="У вас нет доступа к этому действию")
     try:
         result = await db.execute(
