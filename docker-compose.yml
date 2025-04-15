@@ -14,9 +14,6 @@ services:
       - "5432:5432"
     volumes:
       - ./db/create-dbs.sql:/docker-entrypoint-initdb.d/01-create-dbs.sql
-      - ./db/catalog_tables_init.sql:/docker-entrypoint-initdb.d/02-catalog-init.sql
-      - ./db/orders_tables_init.sql:/docker-entrypoint-initdb.d/03-orders-init.sql
-      - ./db/celery_tables_init.sql:/docker-entrypoint-initdb.d/04-celery-init.sql
     networks:
       - app-network
     healthcheck:

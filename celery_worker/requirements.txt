@@ -8,3 +8,5 @@ celery>=5.4.0
 httpx>=0.23.0
 fastapi
 uvicorn
+alembic>=1.12
+psycopg2-binary>=2.9
