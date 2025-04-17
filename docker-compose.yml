@@ -131,13 +131,33 @@ services:
       zookeeper:
         condition: service_healthy
 
-  celery_worker:
+  celery_api:
     build: ./celery_worker
-    ports:
-      - "8004:8000"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${CELERY_DB}
       CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      FIXER_ACCESS_KEY: ${FIXER_ACCESS_KEY}
+    ports:
+      - "8004:8000"
+    networks:
+      - app-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  celery_worker:
+    build: ./celery_worker
+    command: celery -A tasks worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${CELERY_DB}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
       FIXER_ACCESS_KEY: ${FIXER_ACCESS_KEY}
     networks:
       - app-network
@@ -148,6 +168,55 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - app-network
+    depends_on:
+      - prometheus
+
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter
+    ports:
+      - "9100:9100"
+    networks:
+      - app-network
+    pid: "host"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+
+  celery_exporter:
+    image: danihodovic/celery-exporter:latest
+    command: >
+      --broker-url=redis://redis:6379/0
+      --port=9540
+    ports:
+      - "9540:9540"
+    networks:
+      - app-network
+    depends_on:
+      - redis
 
 networks:
   app-network:

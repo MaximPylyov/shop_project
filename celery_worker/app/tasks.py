@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from datetime import datetime
 from functools import wraps
 
@@ -19,7 +20,9 @@ from models import Base, ExchangeRate
 
 celery_app = Celery('tasks')
 celery_app.conf.broker_url = os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
-celery_app.conf.result_backend = os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
+celery_app.conf.result_backend = os.getenv('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+celery_app.conf.worker_send_task_events = True
+celery_app.conf.task_send_sent_event = True
 
 celery_app.conf.update(
     broker_connection_retry=True,
@@ -123,7 +126,7 @@ def process_order_created(order_data):
             
             order_id = order_data.get('order_id')
             payload = {
-                "status": "DELIVERY_CALCULATED",
+                "status": "DELIVERY_CALC",
                 "shipping_cost": float(shipping_cost) 
             }
 
@@ -196,3 +199,9 @@ def start_kafka_listener():
 def at_worker_ready(sender, **kwargs):
     logger.info("Worker is ready, starting Kafka consumer...")
     start_kafka_listener.delay()
+
+@celery_app.task
+def test_task():
+    print("test")
+    time.sleep(10)
+    return 42
