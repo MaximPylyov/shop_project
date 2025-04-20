@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from datetime import datetime
 from functools import wraps
 
@@ -11,7 +12,7 @@ import redis.asyncio as redis
 from aiokafka import AIOKafkaConsumer
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import task_prerun, task_postrun, task_failure
+from celery.signals import task_prerun, task_postrun, task_failure, worker_ready
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -19,7 +20,9 @@ from models import Base, ExchangeRate
 
 celery_app = Celery('tasks')
 celery_app.conf.broker_url = os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
-celery_app.conf.result_backend = os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
+celery_app.conf.result_backend = os.getenv('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+celery_app.conf.worker_send_task_events = True
+celery_app.conf.task_send_sent_event = True
 
 celery_app.conf.update(
     broker_connection_retry=True,
@@ -114,22 +117,46 @@ def fetch_exchange_rates():
 def process_order_created(order_data):
     async def _process():
         try:
+            logger.info(f"Processing order {order_data.get('order_id')}")
             shipping_cost = await calculate_shipping_cost(order_data)
+            logger.info(f"Calculated shipping cost for order {order_data.get('order_id')}: {shipping_cost}")
             
-            async with httpx.AsyncClient() as client:
-                response = await client.put(
-                    f"http://host.docker.internal:8002/orders/{order_data['order_id']}", 
-                    json={
-                        "status": "DELIVERY_CALCULATED",
-                        "shipping_cost": float(shipping_cost) 
-                    }
-                )
-                response.raise_for_status()
-                print(f"Shipping cost updated for order {order_data['order_id']}: {shipping_cost}")
+            token = order_data.get('token', '')
+            headers = {"Cookie": f"access_token={token}"}  # Используем полный токен как есть
+            
+            order_id = order_data.get('order_id')
+            payload = {
+                "status": "DELIVERY_CALC",
+                "shipping_cost": float(shipping_cost) 
+            }
+
+            urls = [
+                "http://orders_service:8000",
+                "http://localhost:8002",
+                "http://host.docker.internal:8002"
+            ]
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                last_error = None
+                for base_url in urls:
+                    try:
+                        url = f"{base_url}/orders/{order_id}"
+                        logger.info(f"Trying to connect to {url}")
+                        response = await client.put(url, json=payload, headers=headers)
+                        response.raise_for_status()
+                        logger.info(f"Successfully updated order at {url}")
+                        return
+                    except Exception as e:
+                        last_error = e
+                        logger.warning(f"Failed to connect to {url}: {str(e)}")
+                        continue
+
+                raise Exception(f"Failed to update order status. Last error: {str(last_error)}")
+
         except Exception as e:
-            print(f"Error processing order {order_data['order_id']}: {str(e)}")
+            logger.error(f"Error processing order {order_data.get('order_id')}: {str(e)}", exc_info=True)
             raise
-    
+
     asyncio.run(_process())
 
 async def calculate_shipping_cost(order_data):
@@ -138,21 +165,43 @@ async def calculate_shipping_cost(order_data):
 async def start_kafka_consumer():
     while True:
         try:
+            logger.info("Attempting to connect to Kafka...")
             consumer = AIOKafkaConsumer(
                 'order_events',
                 bootstrap_servers='kafka:9092',
-                group_id='celery_worker_group'
+                group_id='order_processor_group',
+                auto_offset_reset='earliest',
+                enable_auto_commit=True
             )
             await consumer.start()
+            logger.info("Kafka consumer started successfully")
+            
             async for msg in consumer:
-                event_data = json.loads(msg.value.decode())
-                if event_data.get('action') == 'ORDER_CREATED':
-                    process_order_created.delay(event_data)
+                try:
+                    event_data = json.loads(msg.value.decode())
+                    logger.info(f"Received Kafka message: {event_data}")
+                    
+                    if event_data.get('action') == 'ORDER_CREATED':
+                        logger.info(f"Processing ORDER_CREATED event for order_id: {event_data.get('order_id')}")
+                        process_order_created.delay(event_data)
+                except Exception as e:
+                    logger.error(f"Error processing Kafka message: {e}")
         except Exception as e:
-            print(f"Kafka connection error: {e}")
+            logger.error(f"Kafka connection error: {e}")
             await asyncio.sleep(5) 
 
 @celery_app.task(name='start_kafka_listener')
 @log_task_execution
 def start_kafka_listener():
     asyncio.run(start_kafka_consumer())
+
+@worker_ready.connect
+def at_worker_ready(sender, **kwargs):
+    logger.info("Worker is ready, starting Kafka consumer...")
+    start_kafka_listener.delay()
+
+@celery_app.task
+def test_task():
+    print("test")
+    time.sleep(10)
+    return 42

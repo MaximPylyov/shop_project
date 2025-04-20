@@ -1,11 +1,12 @@
 from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, Float
+from sqlalchemy.dialects.postgresql import UUID
 from database import Base
 
 
 class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer)
+    user_id = Column(UUID)
     status = Column(String(16))
     total_price = Column(Numeric(32,2))
     shipping_cost = Column(Numeric(32,2))
