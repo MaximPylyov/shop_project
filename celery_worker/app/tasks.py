@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import os
 import time
 from datetime import datetime
@@ -15,6 +14,7 @@ from celery.schedules import crontab
 from celery.signals import task_prerun, task_postrun, task_failure, worker_ready
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from logger import logger
 
 from models import Base, ExchangeRate
 
@@ -37,13 +37,6 @@ celery_app.conf.beat_schedule = {
         'schedule': crontab(minute=0),
     },
 }
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
 
 def log_task_execution(task_func):
     @wraps(task_func)
@@ -90,13 +83,16 @@ def fetch_exchange_rates():
                 data = response.json()
                 
                 if not data.get('success'):
+                    logger.error("API Fixer вернул ошибку")
                     raise ValueError("API вернул ошибку")
                     
                 if 'rates' not in data or 'RUB' not in data['rates']:
+                    logger.error("Отсутствуют данные о курсе RUB в ответе API")
                     raise ValueError("Отсутствуют данные о курсе RUB")
                 
                 await redis_client.setex('exchange_rates', 300, str(data['rates']['RUB']))
-                
+                logger.info("Курс получен и закеширован", extra={'rate': data['rates']['RUB']})
+
                 async with async_session() as session:
                     exchange_rate = ExchangeRate(
                         base_currency=data['base'],
@@ -122,7 +118,7 @@ def process_order_created(order_data):
             logger.info(f"Calculated shipping cost for order {order_data.get('order_id')}: {shipping_cost}")
             
             token = order_data.get('token', '')
-            headers = {"Cookie": f"access_token={token}"}  # Используем полный токен как есть
+            headers = {"Cookie": f"access_token={token}"}  
             
             order_id = order_data.get('order_id')
             payload = {
@@ -200,8 +196,4 @@ def at_worker_ready(sender, **kwargs):
     logger.info("Worker is ready, starting Kafka consumer...")
     start_kafka_listener.delay()
 
-@celery_app.task
-def test_task():
-    print("test")
-    time.sleep(10)
-    return 42
+
