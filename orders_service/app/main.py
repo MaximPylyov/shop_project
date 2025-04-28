@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from database import wait_for_db  
 from routes import router
 from prometheus_fastapi_instrumentator import Instrumentator
+from logger import logger
 
 def create_app():
     app = FastAPI(
@@ -17,7 +18,12 @@ def create_app():
 
     @app.on_event("startup")
     async def startup():
+        logger.info("Order Service startup")
         app.state.db = await wait_for_db()
+
+    @app.on_event("shutdown")
+    async def shutdown():
+        logger.info("Order Service shutdown")
 
     Instrumentator().instrument(app).expose(app)
     app.include_router(router)
