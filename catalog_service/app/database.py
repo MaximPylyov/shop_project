@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 from tenacity import retry, stop_after_attempt, wait_exponential
 from sqlalchemy import text
+from logger import logger
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -14,8 +15,6 @@ Base = declarative_base()
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def get_db():
     engine = create_async_engine(DATABASE_URL, echo=True)
-    #async with engine.begin() as conn:
-    #    await conn.run_sync(Base.metadata.create_all)
     return engine
 
 engine = create_async_engine(DATABASE_URL, echo=True)
@@ -29,12 +28,16 @@ async def wait_for_db():
         try:
             async with engine.begin() as conn:
                 await conn.execute(text("SELECT 1"))
-            print("Database connection successful!")
+            logger.info("Database connection successful!")
             return engine
         except Exception as e:
-            print(f"Attempt {i+1}/{max_retries}: Database not ready... {str(e)}")
+            logger.warning(
+                "Database not ready",
+                extra={"attempt": i + 1, "max_retries": max_retries, "error": str(e)}
+            )
             if i < max_retries - 1:
                 await asyncio.sleep(retry_interval)
+    logger.error("Could not connect to database after retries", extra={"max_retries": max_retries})
     raise Exception("Could not connect to database") 
 
 async def get_session() -> AsyncSession:
