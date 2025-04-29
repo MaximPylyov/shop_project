@@ -14,8 +14,6 @@ Base = declarative_base()
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def get_db():
     engine = create_async_engine(DATABASE_URL, echo=True)
-    #async with engine.begin() as conn:
-    #    await conn.run_sync(Base.metadata.create_all)
     return engine
 
 engine = create_async_engine(DATABASE_URL, echo=True)

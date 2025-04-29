@@ -1,7 +1,7 @@
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 import json
 from decimal import Decimal
-
+from logger import logger
 
 KAFKA_URL = "kafka:9092"
 
@@ -19,7 +19,7 @@ async def send_event(event: dict):
     
     try:
         await producer.send('user_events', value=event)
-        print(f"Отправлено событие в Kafka: {event}")
+        logger.info("Отправлено событие в Kafka", extra={"event": event})
     finally:
         await producer.stop()
 
@@ -36,6 +36,6 @@ async def consume_events():
     try:
         async for message in consumer:
             event = message.value
-            print(f"Получено событие: {event}")
+            logger.info("Получено событие", extra={"event": event})
     finally:
         await consumer.stop()
