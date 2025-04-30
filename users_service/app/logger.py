@@ -11,7 +11,7 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
         log_record['logger'] = record.name
 
 
-logger = logging.getLogger("fastapi")
+logger = logging.getLogger("user_service")
 logHandler = logging.StreamHandler()
 formatter = CustomJsonFormatter('%(timestamp)s %(level)s %(name)s %(message)s')
 logHandler.setFormatter(formatter)
