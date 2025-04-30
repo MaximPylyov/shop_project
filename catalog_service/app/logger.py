@@ -1,6 +1,7 @@
 from pythonjsonlogger import jsonlogger
 import logging
 import datetime
+import socket
 
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
@@ -11,9 +12,33 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
         log_record['logger'] = record.name
 
 
-logger = logging.getLogger("catalog_service")
-logHandler = logging.StreamHandler()
-formatter = CustomJsonFormatter('%(timestamp)s %(level)s %(name)s %(message)s')
-logHandler.setFormatter(formatter)
-logger.addHandler(logHandler)
-logger.setLevel(logging.INFO)
+class LogstashTcpHandler(logging.Handler):
+    def __init__(self, host: str, port: int):
+        super().__init__()
+        self.host = host
+        self.port = port
+
+    def emit(self, record):
+        try:
+            log_entry = self.format(record)
+            with socket.create_connection((self.host, self.port), timeout=1) as sock:
+                sock.sendall((log_entry + '\n').encode('utf-8'))
+        except Exception:
+            self.handleError(record)
+
+
+def get_logger(name: str = "catalog_service") -> logging.Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    #для Logstash
+    tcp_handler = LogstashTcpHandler("logstash", 5000)
+    tcp_handler.setFormatter(CustomJsonFormatter('%(timestamp)s %(level)s %(logger)s %(message)s'))
+    logger.addHandler(tcp_handler)
+    # для stdout
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(CustomJsonFormatter('%(timestamp)s %(level)s %(logger)s %(message)s'))
+    logger.addHandler(stream_handler)
+    return logger
+
+
+logger = get_logger()
