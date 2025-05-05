@@ -27,7 +27,7 @@ class LogstashTcpHandler(logging.Handler):
             self.handleError(record)
 
 
-def get_logger(name: str = "users_service") -> logging.Logger:
+def get_logger(name: str = "celery_worker") -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
     #для Logstash

@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import wait_for_db
 from routes import auth, roles, users, permissions
 from prometheus_fastapi_instrumentator import Instrumentator
+from logger import logger
 
 def create_app():
     app = FastAPI(title="User/Auth Service")
@@ -19,7 +20,12 @@ def create_app():
 
     @app.on_event("startup")
     async def startup():
+        logger.info("User/Auth Service startup")
         app.state.db = await wait_for_db()
+
+    @app.on_event("shutdown")
+    async def shutdown():
+        logger.info("User/Auth Service shutdown")
 
     Instrumentator().instrument(app).expose(app)
 
